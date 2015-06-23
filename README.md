@@ -1,4 +1,4 @@
--
+rudiment
 ========
 A simple RESTful resource manager.
 
