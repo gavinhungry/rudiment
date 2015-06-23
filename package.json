@@ -1,0 +1,19 @@
+{
+  "name": "rudiment",
+  "version": "0.0.0",
+  "author": "Gavin Lloyd <gavinhungry@gmail.com>",
+  "description": "A simple RESTful resource manager",
+  "license": "MIT",
+
+  "keywords": [
+    "rest"
+  ],
+
+  "homepage": "https://github.com/gavinhungry/rudiment",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/gavinhungry/rudiment.git"
+  },
+
+  "main": "rudiment.js"
+}
