@@ -1,6 +1,6 @@
 {
   "name": "rudiment",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "author": "Gavin Lloyd <gavinhungry@gmail.com>",
   "description": "A simple RESTful resource manager",
   "license": "MIT",
