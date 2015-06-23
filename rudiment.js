@@ -10,12 +10,10 @@
    * @constructor for Rudiments
    *
    * Rudiment objects have prototype methods that can be overridden as needed.
-   * By default, the database should support a subset of MongoDB API methods
-   * (for example, NeDB works well here).
+   * By default, the database should support a subset of MongoDB API methods.
    *
    * The schema is a predicate function that determines the validity of a
-   * candidate document. The props array is filled automatically if you pass
-   * an object from js-schema here.
+   * candidate document. The props array is filled automatically if possible.
    *
    * @param {Object} opts
    * @param {Object} opts.db - database
@@ -58,7 +56,7 @@
 
   Rudiment.prototype = {
     /**
-     * Get a copy of a document with extraneous properties removed
+     * Remove extraneous properties from a document
      *
      * @param {Object} doc - a document to clean
      * @return {Object} a copy of the cleaned document
@@ -161,7 +159,7 @@
      *
      * @param {Mixed} id - key for document to update
      * @param {Object} updates - updates to apply to document
-     * @param {Function} callback(err, {Number})
+     * @param {Function} callback(err, {Boolean})
      */
     update: function(id, updates, callback) {
       var that = this;
@@ -173,7 +171,7 @@
         }
 
         if (!doc) {
-          return callback(null, 0);
+          return callback(null, false);
         }
 
         Object.keys(doc).forEach(function(prop) {
@@ -191,10 +189,16 @@
 
           return that._db.update(o(that._key, id), {
             $set: doc
-          }, callback);
+          }, function(err, num) {
+            if (err) {
+              return callback(err);
+            }
+
+            callback(null, num > 0);
+          });
         }
 
-        callback(null, 0);
+        callback(null, false);
       });
     },
 
@@ -202,10 +206,16 @@
      * Delete a document from the database
      *
      * @param {Mixed} id - key for document to delete
-     * @param {Function} callback(err, {Number})
+     * @param {Function} callback(err, {Boolean})
      */
     delete: function(id, callback) {
-      this._db.remove(o(this._key, id), callback);
+      this._db.remove(o(this._key, id), function(err, num) {
+        if (err) {
+          return callback(err);
+        }
+
+        callback(null, num > 0);
+      });
     }
   };
 
