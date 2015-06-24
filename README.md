@@ -114,7 +114,7 @@ r.update(123, { name: 'bar' }, function(err, updated) {
 Delete a document from the database.
 
 ```javascript
-r.remove(123, function(err, removed) {
+r.delete(123, function(err, removed) {
   // removed is `true` if a document was deleted, `false` otherwise
 });
 ```
