@@ -1,5 +1,5 @@
 /**
- * rudiment - A simple RESTful resource manager
+ * rudiment - A simple CRUD resource manager
  * https://github.com/gavinhungry/rudiment
  */
 
@@ -7,7 +7,7 @@
   'use strict';
 
   /**
-   * @constructor for Rudiments
+   * @constructor for Rudiment objects
    *
    * Rudiment objects have prototype methods that can be overridden as needed.
    * By default, the database should support a subset of MongoDB API methods.

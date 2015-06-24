@@ -1,6 +1,6 @@
 rudiment
 ========
-A simple RESTful resource manager.
+A simple CRUD resource manager.
 
 Installation
 ------------
