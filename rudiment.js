@@ -42,6 +42,7 @@
       }
     }
 
+    this._path = opts.path;
     this._key = opts.key || (schemaProps ? schemaProps[0] : null) || '_id';
     this._props = opts.props || schemaProps;
     this._uniq = opts.uniq || [this._key];
@@ -55,6 +56,38 @@
   };
 
   Rudiment.prototype = {
+    /**
+     * REST handler
+     *
+     * @param {ServerResponse} res
+     * @param {Function} [map] - map data before responding
+     */
+    rest: function(res, map) {
+      var that = this;
+
+      return function(err, data, method) {
+        if (err) {
+          return res.status(500).end();
+        }
+
+        if (typeof map === 'function') {
+          data = map(data);
+        }
+
+        if (method === 'create') {
+          return data ?
+            res.status(201)
+              .header('Location', '/' + that._path + '/' + data[that._key])
+              .json(data) :
+            res.status(409).end();
+        }
+
+        return data ?
+          res.status(200).json(data) :
+          res.status(404).end();
+      };
+    },
+
     /**
      * Remove extraneous properties from a document
      *
@@ -121,14 +154,17 @@
      */
     create: function(doc, callback) {
       var that = this;
+      var method = 'create';
 
       this.admissible(doc, function(err, ok) {
         if (!ok) {
-          return callback(err, null);
+          return callback(err, null, method);
         }
 
         doc = that.clean(doc);
-        that._db.insert(doc, callback);
+        that._db.insert(doc, function(err, doc) {
+          callback(err, doc, method);
+        });
       });
     },
 
@@ -139,7 +175,11 @@
      * @param {Function} callback(err, {Object|null})
      */
     read: function(id, callback) {
-      this._db.findOne(o(this._key, id), callback);
+      var method = 'read';
+
+      this._db.findOne(o(this._key, id), function(err, doc) {
+        callback(err, doc, method);
+      });
     },
 
     /**
@@ -148,7 +188,11 @@
      * @param {Function} callback(err, {Array})
      */
     readAll: function(callback) {
-      this._db.find({}, callback);
+      var method = 'readAll';
+
+      this._db.find({}, function(err, docs) {
+        callback(err, docs, method);
+      });
     },
 
     /**
@@ -164,14 +208,15 @@
     update: function(id, updates, callback) {
       var that = this;
       updates = updates || {};
+      var method = 'update';
 
       this.read(id, function(err, doc) {
         if (err) {
-          return callback(err);
+          return callback(err, null, method);
         }
 
         if (!doc) {
-          return callback(null, false);
+          return callback(null, false, method);
         }
 
         Object.keys(doc).forEach(function(prop) {
@@ -191,14 +236,14 @@
             $set: doc
           }, function(err, num) {
             if (err) {
-              return callback(err);
+              return callback(err, null, method);
             }
 
-            callback(null, num > 0);
+            callback(null, num > 0, method);
           });
         }
 
-        callback(null, false);
+        callback(null, false, method);
       });
     },
 
@@ -209,12 +254,14 @@
      * @param {Function} callback(err, {Boolean})
      */
     delete: function(id, callback) {
+      var method = 'delete';
+
       this._db.remove(o(this._key, id), function(err, num) {
         if (err) {
-          return callback(err);
+          return callback(err, null, method);
         }
 
-        callback(null, num > 0);
+        callback(null, num > 0, method);
       });
     }
   };
