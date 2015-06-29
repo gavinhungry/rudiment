@@ -123,7 +123,7 @@
     rest: function(res, map) {
       var that = this;
 
-      return function(err, data, method) {
+      return function(err, data, create) {
         if (err) {
           return res.status(500).end();
         }
@@ -132,7 +132,7 @@
           data = map(data);
         }
 
-        if (method === 'create') {
+        if (create) {
           return data ?
             res.status(201)
               .header('Location', '/' + that._path + '/' + data[that._key])
@@ -154,16 +154,15 @@
      */
     create: function(doc, callback) {
       var that = this;
-      var method = 'create';
 
       this.admissible(doc, function(err, ok) {
         if (!ok) {
-          return callback(err, null, method);
+          return callback(err, null, true);
         }
 
         doc = that.clean(doc);
         that._db.insert(doc, function(err, doc) {
-          callback(err, doc, method);
+          callback(err, doc, true);
         });
       });
     },
@@ -175,11 +174,7 @@
      * @param {Function} callback(err, {Object|null})
      */
     read: function(id, callback) {
-      var method = 'read';
-
-      this._db.findOne(o(this._key, id), function(err, doc) {
-        callback(err, doc, method);
-      });
+      this._db.findOne(o(this._key, id), callback);
     },
 
     /**
@@ -188,11 +183,7 @@
      * @param {Function} callback(err, {Array})
      */
     readAll: function(callback) {
-      var method = 'readAll';
-
-      this._db.find({}, function(err, docs) {
-        callback(err, docs, method);
-      });
+      this._db.find({}, callback);
     },
 
     /**
@@ -208,15 +199,14 @@
     update: function(id, updates, callback) {
       var that = this;
       updates = updates || {};
-      var method = 'update';
 
       this.read(id, function(err, doc) {
         if (err) {
-          return callback(err, null, method);
+          return callback(err, null);
         }
 
         if (!doc) {
-          return callback(null, false, method);
+          return callback(null, false);
         }
 
         Object.keys(doc).forEach(function(prop) {
@@ -236,14 +226,14 @@
             $set: doc
           }, function(err, num) {
             if (err) {
-              return callback(err, null, method);
+              return callback(err, null);
             }
 
-            callback(null, num > 0, method);
+            callback(null, num > 0);
           });
         }
 
-        callback(null, false, method);
+        callback(null, false);
       });
     },
 
@@ -254,14 +244,12 @@
      * @param {Function} callback(err, {Boolean})
      */
     delete: function(id, callback) {
-      var method = 'delete';
-
       this._db.remove(o(this._key, id), function(err, num) {
         if (err) {
-          return callback(err, null, method);
+          return callback(err, null);
         }
 
-        callback(null, num > 0, method);
+        callback(null, num > 0);
       });
     }
   };
