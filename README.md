@@ -77,8 +77,9 @@ r.create({ serial: 123 name: 'foo', fingerprint: 123 }, function(err, doc) {
 A REST handler for `ServerResponse` objects.
 
 ```javascript
-api.put('/person/:serial', function(req, res) {
-  r.update(req.params.serial, r.rest(res));
+api.post('/people', function(req, res) {
+  r.create(req.body, r.rest(res));
+  // person URI is provided by Location response header
 });
 ```
 
