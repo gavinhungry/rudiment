@@ -123,7 +123,7 @@
     rest: function(res, map) {
       var that = this;
 
-      return function(err, data, create) {
+      return function(err, data, method) {
         if (err) {
           return res.status(500).end();
         }
@@ -132,12 +132,16 @@
           data = map(data);
         }
 
-        if (create) {
+        if (method === 'create') {
           return data ?
             res.status(201)
               .header('Location', '/' + that._path + '/' + data[that._key])
               .json(data) :
             res.status(409).end();
+        }
+
+        if (method === 'update' && data === null) {
+          return res.status(409).end();
         }
 
         return data ?
@@ -157,12 +161,12 @@
 
       this.admissible(doc, function(err, ok) {
         if (!ok) {
-          return callback(err, null, true);
+          return callback(err, null, 'create');
         }
 
         doc = that.clean(doc);
         that._db.insert(doc, function(err, doc) {
-          callback(err, doc, true);
+          callback(err, doc, 'create');
         });
       });
     },
@@ -215,25 +219,26 @@
           }
         });
 
-        if (that.valid(doc)) {
-          // remove key and unique properties
-          delete doc[that._key];
-          that._uniq.forEach(function(uniq) {
-            delete doc[uniq];
-          });
-
-          return that._db.update(o(that._key, id), {
-            $set: doc
-          }, function(err, num) {
-            if (err) {
-              return callback(err, null);
-            }
-
-            callback(null, num > 0);
-          });
+        // null means the document exists but could not be updated
+        if (!that.valid(doc)) {
+          return callback(null, null, 'update');
         }
 
-        callback(null, false);
+        // remove key and unique properties
+        delete doc[that._key];
+        that._uniq.forEach(function(uniq) {
+          delete doc[uniq];
+        });
+
+        return that._db.update(o(that._key, id), {
+          $set: doc
+        }, function(err, num) {
+          if (err) {
+            return callback(err, null);
+          }
+
+          callback(null, num > 0);
+        });
       });
     },
 
