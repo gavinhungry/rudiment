@@ -19,6 +19,9 @@ var r = new Rudiment({
   // a MongoDB-like database
   db: db.people,
 
+  // optional REST path
+  path: 'person',
+
   // a predicate function to determine validity
   schema: function(doc) {
     return typeof doc.name === 'string';
@@ -116,6 +119,16 @@ Delete a document from the database.
 ```javascript
 r.delete(123, function(err, removed) {
   // removed is `true` if a document was deleted, `false` otherwise
+});
+```
+
+#### rest
+
+A REST handler for `ServerResponse` objects.
+
+```javascript
+api.put('/person/:serial', function(req, res) {
+  r.update(req.params.serial, r.rest(res));
 });
 ```
 
