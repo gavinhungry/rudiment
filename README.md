@@ -72,6 +72,16 @@ r.create({ serial: 123 name: 'foo', fingerprint: 123 }, function(err, doc) {
 });
 ```
 
+#### rest
+
+A REST handler for `ServerResponse` objects.
+
+```javascript
+api.put('/person/:serial', function(req, res) {
+  r.update(req.params.serial, r.rest(res));
+});
+```
+
 #### create
 
 Insert a new document into the database.
@@ -121,17 +131,6 @@ r.delete(123, function(err, removed) {
   // removed is `true` if a document was deleted, `false` otherwise
 });
 ```
-
-#### rest
-
-A REST handler for `ServerResponse` objects.
-
-```javascript
-api.put('/person/:serial', function(req, res) {
-  r.update(req.params.serial, r.rest(res));
-});
-```
-
 License
 -------
 Released under the terms of the

@@ -57,38 +57,6 @@
 
   Rudiment.prototype = {
     /**
-     * REST handler
-     *
-     * @param {ServerResponse} res
-     * @param {Function} [map] - map data before responding
-     */
-    rest: function(res, map) {
-      var that = this;
-
-      return function(err, data, method) {
-        if (err) {
-          return res.status(500).end();
-        }
-
-        if (typeof map === 'function') {
-          data = map(data);
-        }
-
-        if (method === 'create') {
-          return data ?
-            res.status(201)
-              .header('Location', '/' + that._path + '/' + data[that._key])
-              .json(data) :
-            res.status(409).end();
-        }
-
-        return data ?
-          res.status(200).json(data) :
-          res.status(404).end();
-      };
-    },
-
-    /**
      * Remove extraneous properties from a document
      *
      * @param {Object} doc - a document to clean
@@ -144,6 +112,38 @@
 
         callback(null, !docs.length);
       });
+    },
+
+    /**
+     * REST handler
+     *
+     * @param {ServerResponse} res
+     * @param {Function} [map] - map data before responding
+     */
+    rest: function(res, map) {
+      var that = this;
+
+      return function(err, data, method) {
+        if (err) {
+          return res.status(500).end();
+        }
+
+        if (typeof map === 'function') {
+          data = map(data);
+        }
+
+        if (method === 'create') {
+          return data ?
+            res.status(201)
+              .header('Location', '/' + that._path + '/' + data[that._key])
+              .json(data) :
+            res.status(409).end();
+        }
+
+        return data ?
+          res.status(200).json(data) :
+          res.status(404).end();
+      };
     },
 
     /**
