@@ -122,8 +122,9 @@
      */
     rest: function(res, map) {
       var that = this;
+      var method = res.req.method;
 
-      return function(err, data, method) {
+      return function(err, data) {
         if (err) {
           return res.status(500).end();
         }
@@ -132,7 +133,7 @@
           data = map(data);
         }
 
-        if (method === 'create') {
+        if (method === 'GET') {
           return data ?
             res.status(201)
               .header('Location', '/' + that._path + '/' + data[that._key])
@@ -140,7 +141,7 @@
             res.status(409).end();
         }
 
-        if (method === 'update' && data === null) {
+        if (method === 'PUT' && data === null) {
           return res.status(409).end();
         }
 
@@ -161,12 +162,12 @@
 
       this.admissible(doc, function(err, ok) {
         if (!ok) {
-          return callback(err, null, 'create');
+          return callback(err, null);
         }
 
         doc = that.clean(doc);
         that._db.insert(doc, function(err, doc) {
-          callback(err, doc, 'create');
+          callback(err, doc);
         });
       });
     },
@@ -221,7 +222,7 @@
 
         // null means the document exists but could not be updated
         if (!that.valid(doc)) {
-          return callback(null, null, 'update');
+          return callback(null, null);
         }
 
         // remove key and unique properties
