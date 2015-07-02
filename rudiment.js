@@ -133,7 +133,7 @@
           data = map(data);
         }
 
-        if (method === 'GET') {
+        if (method === 'POST') {
           return data ?
             res.status(201)
               .header('Location', '/' + that._path + '/' + data[that._key])
