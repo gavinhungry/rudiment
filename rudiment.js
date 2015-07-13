@@ -43,7 +43,7 @@
     }
 
     this._path = opts.path;
-    this._key = opts.key || (schemaProps ? schemaProps[0] : null) || '_id';
+    this._key = opts.key || (schemaProps ? schemaProps[0] : '_id');
     this._props = opts.props || schemaProps;
     this._uniq = opts.uniq || [this._key];
 
