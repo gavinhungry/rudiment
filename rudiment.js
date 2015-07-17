@@ -43,8 +43,14 @@
     }
 
     this._path = opts.path;
-    this._key = opts.key || (schemaProps ? schemaProps[0] : '_id');
+    this._key = opts.key || (schemaProps ? schemaProps[0] : null) || '_id';
     this._props = opts.props || schemaProps;
+
+    if (opts.auto) {
+      this._auto = true;
+      this._key = opts.auto;
+    }
+
     this._uniq = opts.uniq || [this._key];
 
     // allow the constructor to override any of the prototype methods
@@ -130,7 +136,9 @@
         }
 
         if (typeof map === 'function') {
-          data = map(data);
+          if (data) {
+            data = map(data);
+          }
         }
 
         if (method === 'POST') {
@@ -166,8 +174,16 @@
         }
 
         doc = that.clean(doc);
-        that._db.insert(doc, function(err, doc) {
-          callback(err, doc);
+
+        that._db.find().sort(o(that._key, -1)).limit(1).exec(function(err, max) {
+          if (that._auto) {
+            var maxKey = max[0] ? max[0][that._key] : 0;
+            doc[that._key] = maxKey + 1;
+          }
+
+          that._db.insert(doc, function(err, doc) {
+            callback(err, doc);
+          });
         });
       });
     },
