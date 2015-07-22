@@ -204,7 +204,7 @@
      * @param {Function} callback(err, {Array})
      */
     readAll: function(callback) {
-      this._db.find({}, callback);
+      this._db.find({}).sort(o(this._key, 1)).exec(callback);
     },
 
     /**
