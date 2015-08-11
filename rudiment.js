@@ -186,6 +186,10 @@
           }
 
           that._db.insert(doc, function(err, doc) {
+            if (doc && typeof that._map === 'function') {
+              doc = that._map(doc) || doc;
+            }
+
             callback(err, doc);
           });
         });
