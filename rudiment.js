@@ -31,6 +31,9 @@
       throw new Error('No database provided');
     }
 
+    var dbCursorProto = Object.getPrototypeOf(this._db.find());
+    dbCursorProto.toArray = dbCursorProto.toArray || dbCursorProto.exec;
+
     this._schema = opts.schema;
 
     // attempt to get props from the passed schema
@@ -175,7 +178,7 @@
 
         doc = that.clean(doc);
 
-        that._db.find().sort(o(that._key, -1)).limit(1).exec(function(err, max) {
+        that._db.find().sort(o(that._key, -1)).limit(1).toArray(function(err, max) {
           if (that._auto) {
             var maxKey = max[0] ? max[0][that._key] : 0;
             doc[that._key] = maxKey + 1;
@@ -204,7 +207,7 @@
      * @param {Function} callback(err, {Array})
      */
     readAll: function(callback) {
-      this._db.find({}).sort(o(this._key, 1)).exec(callback);
+      this._db.find({}).sort(o(this._key, 1)).toArray(callback);
     },
 
     /**
