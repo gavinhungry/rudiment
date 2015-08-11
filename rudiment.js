@@ -137,7 +137,7 @@
 
         if (typeof map === 'function') {
           if (data) {
-            data = map(data);
+            data = map(data) || data;
           }
         }
 
