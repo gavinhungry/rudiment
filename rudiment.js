@@ -35,6 +35,7 @@
     dbCursorProto.toArray = dbCursorProto.toArray || dbCursorProto.exec;
 
     this._schema = opts.schema;
+    this._map = opts.map;
 
     // attempt to get props from the passed schema
     var schemaProps;
@@ -198,7 +199,15 @@
      * @param {Function} callback(err, {Object|null})
      */
     read: function(id, callback) {
-      this._db.findOne(o(this._key, id), callback);
+      var that = this;
+
+      this._db.findOne(o(this._key, id), function(err, doc) {
+        if (doc && typeof that._map === 'function') {
+          doc = that._map(doc) || doc;
+        }
+
+        callback(err, doc);
+      });
     },
 
     /**
@@ -207,7 +216,17 @@
      * @param {Function} callback(err, {Array})
      */
     readAll: function(callback) {
-      this._db.find({}).sort(o(this._key, 1)).toArray(callback);
+      var that = this;
+
+      this._db.find({}).sort(o(this._key, 1)).toArray(function(err, docs) {
+        if (docs && typeof that._map === 'function') {
+          docs = docs.map(function(doc) {
+            return that._map(doc) || doc;
+          });
+        }
+
+        callback(err, docs);
+      });
     },
 
     /**
@@ -252,12 +271,12 @@
 
         return that._db.update(o(that._key, id), {
           $set: doc
-        }, function(err, num) {
+        }, function(err) {
           if (err) {
             return callback(err, null);
           }
 
-          callback(null, num > 0);
+          that.read(id, callback);
         });
       });
     },
@@ -274,7 +293,8 @@
           return callback(err, null);
         }
 
-        callback(null, num > 0);
+        var n = typeof num === 'number' ? num : num.n;
+        callback(null, n > 0);
       });
     }
   };
