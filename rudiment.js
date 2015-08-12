@@ -205,7 +205,7 @@
     read: function(id, callback) {
       var that = this;
 
-      this._db.findOne(o(this._key, id), function(err, doc) {
+      this._db.findOne(o(this._key, id || ''), function(err, doc) {
         if (doc && typeof that._map === 'function') {
           doc = that._map(doc) || doc;
         }
@@ -292,7 +292,7 @@
      * @param {Function} callback(err, {Boolean})
      */
     delete: function(id, callback) {
-      this._db.remove(o(this._key, id), function(err, num) {
+      this._db.remove(o(this._key, id || ''), function(err, num) {
         if (err) {
           return callback(err, null);
         }
