@@ -34,14 +34,14 @@
     var dbCursorProto = Object.getPrototypeOf(this._db.find());
     dbCursorProto.toArray = dbCursorProto.toArray || dbCursorProto.exec;
 
-    this._schema = opts.schema;
+    this._schema = Array.isArray(opts.schema) ? opts.schema : (opts.schema ? [opts.schema] : []);
     this._in_map = opts.in;
     this._out_map = opts.out;
 
     // attempt to get props from the passed schema
     var schemaProps;
-    if (this._schema && this._schema.toJSON) {
-      var obj = this._schema.toJSON();
+    if (this._schema[0] && this._schema[0].toJSON) {
+      var obj = this._schema[0].toJSON();
       if (obj && obj.properties) {
         schemaProps = Object.keys(obj.properties);
       }
@@ -94,7 +94,15 @@
      * @return {Boolean}
      */
     valid: function(doc) {
-      return this._schema ? this._schema(doc) : true;
+      var i;
+
+      for (i = 0; i < this._schema.length; i++) {
+        if (!this._schema[i](doc)) {
+          return false;
+        }
+      }
+
+      return true;
     },
 
     /**
