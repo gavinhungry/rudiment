@@ -35,7 +35,8 @@
     dbCursorProto.toArray = dbCursorProto.toArray || dbCursorProto.exec;
 
     this._schema = opts.schema;
-    this._map = opts.map;
+    this._in_map = opts.in;
+    this._out_map = opts.out;
 
     // attempt to get props from the passed schema
     var schemaProps;
@@ -134,9 +135,14 @@
       var that = this;
       var method = res.req.method;
 
-      return function(err, data) {
+      return function(err, data, status) {
         if (err) {
           return res.status(500).end();
+        }
+
+        var statusCode = null;
+        switch(status) {
+          case 'invalid': statusCode = 400; break;
         }
 
         if (typeof map === 'function') {
@@ -150,11 +156,11 @@
             res.status(201)
               .header('Location', '/' + that._path + '/' + data[that._key])
               .json(data) :
-            res.status(409).end();
+            res.status(statusCode || 409).end();
         }
 
         if (method === 'PUT' && data === null) {
-          return res.status(409).end();
+          return res.status(statusCode || 409).end();
         }
 
         return data ?
@@ -172,6 +178,14 @@
     create: function(doc, callback) {
       var that = this;
 
+      if (doc && typeof that._in_map === 'function') {
+        doc = that._in_map(doc) || doc;
+      }
+
+      if (!this.valid(doc)) {
+        return callback(null, null, 'invalid');
+      }
+
       this.admissible(doc, function(err, ok) {
         if (!ok) {
           return callback(err, null);
@@ -186,8 +200,8 @@
           }
 
           that._db.insert(doc, function(err, doc) {
-            if (doc && typeof that._map === 'function') {
-              doc = that._map(doc) || doc;
+            if (doc && typeof that._out_map === 'function') {
+              doc = that._out_map(doc) || doc;
             }
 
             callback(err, doc);
@@ -206,8 +220,8 @@
       var that = this;
 
       this._db.findOne(o(this._key, id || ''), function(err, doc) {
-        if (doc && typeof that._map === 'function') {
-          doc = that._map(doc) || doc;
+        if (doc && typeof that._out_map === 'function') {
+          doc = that._out_map(doc) || doc;
         }
 
         callback(err, doc);
@@ -223,9 +237,9 @@
       var that = this;
 
       this._db.find({}).sort(o(this._key, 1)).toArray(function(err, docs) {
-        if (docs && typeof that._map === 'function') {
+        if (docs && typeof that.__out_map === 'function') {
           docs = docs.map(function(doc) {
-            return that._map(doc) || doc;
+            return that._out_map(doc) || doc;
           });
         }
 
@@ -264,7 +278,7 @@
 
         // null means the document exists but could not be updated
         if (!that.valid(doc)) {
-          return callback(null, null);
+          return callback(null, null, 'invalid');
         }
 
         // remove key and unique properties
