@@ -295,6 +295,8 @@
           delete doc[uniq];
         });
 
+        doc = that.clean(doc);
+
         return that._db.update(o(that._key, id), {
           $set: doc
         }, function(err) {
