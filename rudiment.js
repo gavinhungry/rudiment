@@ -245,7 +245,7 @@
       var that = this;
 
       this._db.find({}).sort(o(this._key, 1)).toArray(function(err, docs) {
-        if (docs && typeof that.__out_map === 'function') {
+        if (docs && typeof that._out_map === 'function') {
           docs = docs.map(function(doc) {
             return that._out_map(doc) || doc;
           });
