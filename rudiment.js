@@ -79,7 +79,10 @@
       }
 
       return this._props.reduce(function(obj, prop) {
-        obj[prop] = doc[prop];
+        if (doc.hasOwnProperty(prop)) {
+          obj[prop] = doc[prop];
+        }
+
         return obj;
       }, {});
     },
