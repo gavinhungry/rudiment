@@ -156,27 +156,33 @@
           case 'invalid': statusCode = 400; break;
         }
 
-        if (typeof map === 'function') {
-          if (data) {
-            data = map(data) || data;
+        var fin = function() {
+          if (method === 'POST') {
+            return data ?
+              res.status(201)
+                .header('Location', '/' + that._path + '/' + data[that._key])
+                .json(data) :
+              res.status(statusCode || 409).end();
           }
-        }
 
-        if (method === 'POST') {
+          if (method === 'PUT' && data === null) {
+            return res.status(statusCode || 409).end();
+          }
+
           return data ?
-            res.status(201)
-              .header('Location', '/' + that._path + '/' + data[that._key])
-              .json(data) :
-            res.status(statusCode || 409).end();
+            res.status(200).json(data) :
+            res.status(404).end();
+        };
+
+        if (data && typeof map === 'function') {
+          if (map.lengh === 2) {
+            return map(data, fin);
+          }
+
+          data = map(data) || data;
         }
 
-        if (method === 'PUT' && data === null) {
-          return res.status(statusCode || 409).end();
-        }
-
-        return data ?
-          res.status(200).json(data) :
-          res.status(404).end();
+        fin();
       };
     },
 
