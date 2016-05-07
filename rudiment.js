@@ -175,7 +175,7 @@
         };
 
         if (data && typeof map === 'function') {
-          if (map.lengh === 2) {
+          if (map.length === 2) {
             return map(data, fin);
           }
 
