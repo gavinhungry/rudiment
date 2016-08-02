@@ -246,14 +246,15 @@
     },
 
     /**
-     * Get all documents from the database
+     * Get all documents from the database with matching properties
      *
+     * @param {Object} params
      * @param {Function} callback(err, {Array})
      */
-    readAll: function(callback) {
+    find: function(params, callback) {
       var that = this;
 
-      this._db.find({}).sort(o(this._key, 1)).toArray(function(err, docs) {
+      this._db.find(params || {}).sort(o(this._key, 1)).toArray(function(err, docs) {
         if (docs && typeof that._out_map === 'function') {
           docs = docs.map(function(doc) {
             return that._out_map(doc) || doc;
@@ -262,6 +263,15 @@
 
         callback(err, docs);
       });
+    },
+
+    /**
+     * Get all documents from the database
+     *
+     * @param {Function} callback(err, {Array})
+     */
+    readAll: function(callback) {
+      this.find(null, callback);
     },
 
     /**
