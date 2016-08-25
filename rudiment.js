@@ -6,6 +6,69 @@
 (function() {
   'use strict';
 
+  var dbTypes = [
+    {
+      name: 'rethinkdb',
+      id: 'id',
+      filter: function() {
+        return this.hasOwnProperty('conn');
+      },
+      methods: {
+        create: function() {},
+
+        read: function(id) {
+          return this._db.table.get(id).run(this._db.conn);
+        },
+
+        update: function() {},
+        delete: function() {}
+      }
+    }, {
+      name: 'mongodb',
+      default: true, // leave default dbType last
+      id: '_id',
+      methods: {
+        create: function() {},
+
+        read: function(id) {
+          var that = this;
+
+          return new Promise(function(res, rej) {
+            that._db.findOne(o(that._key, id || ''), function(err, doc) {
+              if (err) {
+                return rej(err);
+              }
+
+              if (doc && typeof that._out_map === 'function') {
+                doc = that._out_map(doc) || doc;
+              }
+
+              res(doc);
+            });
+          });
+        },
+
+        update: function() {},
+        delete: function() {}
+      }
+    }
+  ];
+
+  /**
+   * Given a passed database object, get the database type
+   *
+   * FIXME: Validate all types (even default), return null otherwise
+   *
+   * @param {Object} db - database object passed to Rudiment constructor
+   * @return {Object} object from dbTypes
+   */
+  var getDbType = function(db) {
+    return dbTypes.find(function(dbType) {
+      return typeof dbType.filter === 'function' ?
+        dbType.filter.call(db) : dbType.default;
+    });
+  };
+
   /**
    * @constructor for Rudiment objects
    *
@@ -19,7 +82,7 @@
    * @param {Object} opts.db - database
    * @param {Function} [opts.schema] - predicate function for schema validation
    * @param {Array} [opts.props] - document properties to filter
-   * @param {String} [opts.key] - document key in database (defaults to first prop or '_id')
+   * @param {String} [opts.key] - document key in database (defaults to first prop or dbType.id)
    * @param {Array} [opts.uniq] - document properties to consider unique
    */
   var Rudiment = function(opts) {
@@ -31,8 +94,15 @@
       throw new Error('No database provided');
     }
 
-    var dbCursorProto = Object.getPrototypeOf(this._db.find());
-    dbCursorProto.toArray = dbCursorProto.toArray || dbCursorProto.exec;
+    this._dbType = getDbType(opts.db);
+    if (!this._dbType) {
+      throw new Error('Unknown database API');
+    }
+
+    if (this._dbType.name === 'mongodb') {
+      var dbCursorProto = Object.getPrototypeOf(this._db.find());
+      dbCursorProto.toArray = dbCursorProto.toArray || dbCursorProto.exec;
+    }
 
     this._schema = Array.isArray(opts.schema) ? opts.schema : (opts.schema ? [opts.schema] : []);
     this._in_map = opts.in;
@@ -48,7 +118,7 @@
     }
 
     this._path = opts.path;
-    this._key = opts.key || (schemaProps ? schemaProps[0] : null) || '_id';
+    this._key = opts.key || (schemaProps ? schemaProps[0] : null) || this._dbType.id;
     this._props = opts.props || schemaProps;
 
     if (opts.auto) {
@@ -67,6 +137,10 @@
   };
 
   Rudiment.prototype = {
+    getDbType: function() {
+      return this._dbType.name;
+    },
+
     /**
      * Remove extraneous properties from a document
      *
@@ -231,18 +305,10 @@
      * Get a document from the database by key
      *
      * @param {Mixed} id - key for document to get
-     * @param {Function} callback(err, {Object|null})
+     * @return {Promise}
      */
-    read: function(id, callback) {
-      var that = this;
-
-      this._db.findOne(o(this._key, id || ''), function(err, doc) {
-        if (doc && typeof that._out_map === 'function') {
-          doc = that._out_map(doc) || doc;
-        }
-
-        callback(err, doc);
-      });
+    read: function(id) {
+      return this._dbType.methods.read.call(this, id);
     },
 
     /**
