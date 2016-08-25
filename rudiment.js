@@ -6,53 +6,16 @@
 (function() {
   'use strict';
 
-  var dbTypes = [
-    {
-      name: 'rethinkdb',
-      id: 'id',
-      filter: function() {
-        return this.hasOwnProperty('conn');
-      },
-      methods: {
-        create: function() {},
+  var dbTypes = ['mongodb', 'rethinkdb'].map(function(dbModule) {
+    var dbType = require('./lib/db/' + dbModule + '.js');
+    dbType.name = dbModule;
 
-        read: function(id) {
-          return this._db.table.get(id).run(this._db.conn);
-        },
+    return dbType;
+  });
 
-        update: function() {},
-        delete: function() {}
-      }
-    }, {
-      name: 'mongodb',
-      default: true, // leave default dbType last
-      id: '_id',
-      methods: {
-        create: function() {},
-
-        read: function(id) {
-          var that = this;
-
-          return new Promise(function(res, rej) {
-            that._db.findOne(o(that._key, id || ''), function(err, doc) {
-              if (err) {
-                return rej(err);
-              }
-
-              if (doc && typeof that._out_map === 'function') {
-                doc = that._out_map(doc) || doc;
-              }
-
-              res(doc);
-            });
-          });
-        },
-
-        update: function() {},
-        delete: function() {}
-      }
-    }
-  ];
+  var defaultDbType = dbTypes.find(function(dbType) {
+    return dbType.default;
+  });
 
   /**
    * Given a passed database object, get the database type
@@ -64,9 +27,9 @@
    */
   var getDbType = function(db) {
     return dbTypes.find(function(dbType) {
-      return typeof dbType.filter === 'function' ?
-        dbType.filter.call(db) : dbType.default;
-    });
+      return dbType.name === db.type ||
+        typeof dbType.filter === 'function' ? dbType.filter.call(db) : false;
+    }) || defaultDbType;
   };
 
   /**
@@ -95,6 +58,7 @@
     }
 
     this._dbType = getDbType(opts.db);
+
     if (!this._dbType) {
       throw new Error('Unknown database API');
     }
@@ -133,6 +97,12 @@
       if (opts[method]) {
         that[method] = opts[method];
       }
+    });
+  };
+
+  Rudiment.getSupportedDbTypes = function() {
+    return dbTypes.map(function(dbType) {
+      return dbType.name;
     });
   };
 
