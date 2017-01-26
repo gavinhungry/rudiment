@@ -2,7 +2,7 @@
   "name": "rudiment",
   "version": "1.0.0",
   "author": "Gavin Lloyd <gavinhungry@gmail.com>",
-  "description": "A simple CRUD resource manager",
+  "description": "CRUD resource manager",
   "license": "MIT",
 
   "keywords": [
@@ -14,6 +14,11 @@
     "type": "git",
     "url": "git://github.com/gavinhungry/rudiment.git"
   },
+
+  "dbModules": [
+    "mongodb",
+    "rethinkdb"
+  ],
 
   "main": "rudiment.js"
 }

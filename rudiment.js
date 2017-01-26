@@ -1,12 +1,14 @@
 /**
- * rudiment - A simple CRUD resource manager
+ * rudiment - CRUD resource manager
  * https://github.com/gavinhungry/rudiment
  */
 
 (function() {
   'use strict';
 
-  var dbTypes = ['mongodb', 'rethinkdb'].map(function(dbModule) {
+  var pkg = require('./package.json');
+
+  var dbTypes = pkg.dbModules.map(function(dbModule) {
     var dbType = require('./lib/db/' + dbModule + '.js');
     dbType.name = dbModule;
 
@@ -20,16 +22,17 @@
   /**
    * Given a passed database object, get the database type
    *
-   * FIXME: Validate all types (even default), return null otherwise
-   *
    * @param {Object} db - database object passed to Rudiment constructor
-   * @return {Object} object from dbTypes
+   * @return {Object|null} object from dbTypes
    */
   var getDbType = function(db) {
+    if (!db.type) {
+      return defaultDbType;
+    }
+
     return dbTypes.find(function(dbType) {
-      return dbType.name === db.type ||
-        typeof dbType.filter === 'function' ? dbType.filter.call(db) : false;
-    }) || defaultDbType;
+      return dbType.name === db.type;
+    }) || null;
   };
 
   /**
@@ -60,12 +63,7 @@
     this._dbType = getDbType(opts.db);
 
     if (!this._dbType) {
-      throw new Error('Unknown database API');
-    }
-
-    if (this._dbType.name === 'mongodb') {
-      var dbCursorProto = Object.getPrototypeOf(this._db.find());
-      dbCursorProto.toArray = dbCursorProto.toArray || dbCursorProto.exec;
+      throw new Error('Unknown database type');
     }
 
     this._schema = Array.isArray(opts.schema) ? opts.schema : (opts.schema ? [opts.schema] : []);
@@ -98,6 +96,13 @@
         that[method] = opts[method];
       }
     });
+
+    this._dbApi = this._dbType.api();
+    Object.keys(this._dbApi).forEach(function(dbApiFnName) {
+      that._dbApi[dbApiFnName] = that._dbApi[dbApiFnName].bind(that);
+    });
+
+    this._init = this._dbApi.init();
   };
 
   Rudiment.getSupportedDbTypes = function() {
@@ -141,15 +146,9 @@
      * @return {Boolean}
      */
     valid: function(doc) {
-      var i;
-
-      for (i = 0; i < this._schema.length; i++) {
-        if (!this._schema[i](doc)) {
-          return false;
-        }
-      }
-
-      return true;
+      return !!this._schema.find(function(schemaFn) {
+        return schemaFn(doc);
+      });
     },
 
     /**
@@ -234,9 +233,9 @@
      * Insert a new document into the database
      *
      * @param {Object} doc - a document to insert
-     * @param {Function} callback(err, {Object|null})
+     * @return {Promise}
      */
-    create: function(doc, callback) {
+    create: function(doc) {
       var that = this;
 
       if (doc && typeof that._in_map === 'function') {
@@ -244,31 +243,39 @@
       }
 
       if (!this.valid(doc)) {
-        return callback(null, null, 'invalid');
+        return Promise.reject(new Error('Invalid document'));
       }
 
-      this.admissible(doc, function(err, ok) {
-        if (!ok) {
-          return callback(err, null);
+      return this._init.then(that._dbApi.findMaxIndex).then(function(max) {
+        if (typeof max === 'number') {
+          doc[that._key] = max;
         }
 
-        doc = that.clean(doc);
-
-        that._db.find().sort(o(that._key, -1)).limit(1).toArray(function(err, max) {
-          if (that._auto) {
-            var maxKey = max[0] ? max[0][that._key] : 0;
-            doc[that._key] = maxKey + 1;
-          }
-
-          that._db.insert(doc, function(err, doc) {
-            if (doc && typeof that._out_map === 'function') {
-              doc = that._out_map(doc) || doc;
-            }
-
-            callback(err, doc);
-          });
-        });
+        return that._dbApi.create(doc);
       });
+
+      // this.admissible(doc, function(err, ok) {
+      //   if (!ok) {
+      //     return callback(err, null);
+      //   }
+
+      //   doc = that.clean(doc);
+
+      //   that._db.find().sort(o(that._key, -1)).limit(1).toArray(function(err, max) {
+      //     if (that._auto) {
+      //       var maxKey = max[0] ? max[0][that._key] : 0;
+      //       doc[that._key] = maxKey + 1;
+      //     }
+
+      //     that._db.insert(doc, function(err, doc) {
+      //       if (doc && typeof that._out_map === 'function') {
+      //         doc = that._out_map(doc) || doc;
+      //       }
+
+      //       callback(err, doc);
+      //     });
+      //   });
+      // });
     },
 
     /**
@@ -278,36 +285,40 @@
      * @return {Promise}
      */
     read: function(id) {
-      return this._dbType.methods.read.call(this, id);
+      var that = this;
+
+      return this._dbApi.read(id).then(function(doc) {
+        return doc && typeof that._out_map === 'function' ? that._out_map(doc) || doc : doc;
+      });
     },
 
     /**
      * Get all documents from the database with matching properties
      *
-     * @param {Object} params
-     * @param {Function} callback(err, {Array})
+     * @param {Object} props
+     * @return {Promise} -> {Array}
      */
-    find: function(params, callback) {
+    find: function(props) {
       var that = this;
 
-      this._db.find(params || {}).sort(o(this._key, 1)).toArray(function(err, docs) {
+      return this._dbApi.find(props || {}).then(function(docs) {
         if (docs && typeof that._out_map === 'function') {
           docs = docs.map(function(doc) {
             return that._out_map(doc) || doc;
           });
         }
 
-        callback(err, docs);
+        return docs;
       });
     },
 
     /**
      * Get all documents from the database
      *
-     * @param {Function} callback(err, {Array})
+     * @return {Promise} -> {Array}
      */
-    readAll: function(callback) {
-      this.find(null, callback);
+    readAll: function() {
+      return this.find();
     },
 
     /**
@@ -368,9 +379,12 @@
      * Delete a document from the database
      *
      * @param {Mixed} id - key for document to delete
-     * @param {Function} callback(err, {Boolean})
+     * @return {Promise}
      */
     delete: function(id, callback) {
+      return this._dbApi.delete(id);
+
+/*
       this._db.remove(o(this._key, id || ''), function(err, num) {
         if (err) {
           return callback(err, null);
@@ -379,6 +393,8 @@
         var n = typeof num === 'number' ? num : num.n;
         callback(null, n > 0);
       });
+*/
+
     }
   };
 
