@@ -4,7 +4,7 @@ var err = function(err) {
 
 var ok = function(data) {
   return console.log('OK', data);
-}
+};
 
 var Rudiment = require('./rudiment.js');
 var jsSchema = require('js-schema');
@@ -23,12 +23,3 @@ var users = new Rudiment({
 
   auto: 'uid'
 });
-
-// users.create({
-//   username: 'foobar',
-//   name: 'Foo Bar ',
-//   age: 40,
-//   color: 'blue'
-// }).then(ok, err);
-
-users._db.delete().run().then(ok, err);

@@ -9,7 +9,7 @@
   var pkg = require('./package.json');
 
   var dbTypes = pkg.dbModules.map(function(dbModule) {
-    var dbType = require('./lib/db/' + dbModule + '.js');
+    var dbType = require('./lib/' + dbModule + '.js');
     dbType.name = dbModule;
 
     return dbType;
@@ -20,7 +20,7 @@
   });
 
   /**
-   * Given a passed database object, get the database type
+   * Given a database object, get the database type
    *
    * @param {Object} db - database object passed to Rudiment constructor
    * @return {Object|null} object from dbTypes
@@ -33,6 +33,20 @@
     return dbTypes.find(function(dbType) {
       return dbType.name === db.type;
     }) || null;
+  };
+
+  /**
+   * Return a copy of an object with only the picked keys
+   *
+   * @param {Object} obj
+   * @param {Array} keys
+   * @return {Object}
+   */
+  var pick = function(obj, keys) {
+    return keys.reduce(function(memo, key) {
+      memo[key] = obj[key];
+      return memo;
+    }, {});
   };
 
   /**
@@ -102,7 +116,7 @@
       that._dbApi[dbApiFnName] = that._dbApi[dbApiFnName].bind(that);
     });
 
-    this._init = this._dbApi.init();
+    this._init = this._auto ? this._dbApi.init() : Promise.resolve();
   };
 
   Rudiment.getSupportedDbTypes = function() {
@@ -136,6 +150,14 @@
       }, {});
     },
 
+    findMaxIndex: function() {
+      if (!this._auto) {
+        return Promise.resolve(null);
+      }
+
+      return this._dbApi.findMaxIndex();
+    },
+
     /**
      * Check if a document is valid
      *
@@ -145,7 +167,7 @@
      * @param {Object} doc - a document to test
      * @return {Boolean}
      */
-    valid: function(doc) {
+    isValid: function(doc) {
       return !!this._schema.find(function(schemaFn) {
         return schemaFn(doc);
       });
@@ -158,75 +180,11 @@
      * document in the database is already using its unique keys.
      *
      * @param {Object} doc - a document to test
-     * @param {Function} callback(err, {Boolean})
+     * @return {Promise}
      */
-    admissible: function(doc, callback) {
-      if (!this.valid(doc)) {
-        callback(null, false);
-        return;
-      }
-
-      this._db.find({
-        $or: this._uniq.map(function(uniq) {
-          return o(uniq, doc[uniq]);
-        })
-      }, function(err, docs) {
-        if (err) {
-          return callback(err, false);
-        }
-
-        callback(null, !docs.length);
-      });
-    },
-
-    /**
-     * REST handler
-     *
-     * @param {ServerResponse} res
-     * @param {Function} [map] - map data before responding
-     */
-    rest: function(res, map) {
-      var that = this;
-      var method = res.req.method;
-
-      return function(err, data, status) {
-        if (err) {
-          return res.status(500).end();
-        }
-
-        var statusCode = null;
-        switch(status) {
-          case 'invalid': statusCode = 400; break;
-        }
-
-        var fin = function() {
-          if (method === 'POST') {
-            return data ?
-              res.status(201)
-                .header('Location', '/' + that._path + '/' + data[that._key])
-                .json(data) :
-              res.status(statusCode || 409).end();
-          }
-
-          if (method === 'PUT' && data === null) {
-            return res.status(statusCode || 409).end();
-          }
-
-          return data ?
-            res.status(200).json(data) :
-            res.status(404).end();
-        };
-
-        if (data && typeof map === 'function') {
-          if (map.length === 2) {
-            return map(data, fin);
-          }
-
-          data = map(data) || data;
-        }
-
-        fin();
-      };
+    isAdmissible: function(doc) {
+      var props = pick(doc, this._uniq);
+      return this.isValid(doc) ? this._dbApi.isAdmissible(doc, props) : Promise.resolve(false);
     },
 
     /**
@@ -242,40 +200,29 @@
         doc = that._in_map(doc) || doc;
       }
 
-      if (!this.valid(doc)) {
-        return Promise.reject(new Error('Invalid document'));
-      }
+      return this._init.then(function() {
+        return that.isAdmissible(doc);
+      }).then(function(admissible) {
+        if (!admissible) {
+          throw new Error('Document not admissible');
+        }
 
-      return this._init.then(that._dbApi.findMaxIndex).then(function(max) {
+        doc = that.clean(doc);
+
+        return that.findMaxIndex();
+      }).then(function(max) {
         if (typeof max === 'number') {
           doc[that._key] = max;
         }
 
-        return that._dbApi.create(doc);
+        return that._dbApi.create(doc).then(function(doc) {
+          if (!doc) {
+            throw new Error ('Document not created');
+          }
+
+          return doc;
+        });
       });
-
-      // this.admissible(doc, function(err, ok) {
-      //   if (!ok) {
-      //     return callback(err, null);
-      //   }
-
-      //   doc = that.clean(doc);
-
-      //   that._db.find().sort(o(that._key, -1)).limit(1).toArray(function(err, max) {
-      //     if (that._auto) {
-      //       var maxKey = max[0] ? max[0][that._key] : 0;
-      //       doc[that._key] = maxKey + 1;
-      //     }
-
-      //     that._db.insert(doc, function(err, doc) {
-      //       if (doc && typeof that._out_map === 'function') {
-      //         doc = that._out_map(doc) || doc;
-      //       }
-
-      //       callback(err, doc);
-      //     });
-      //   });
-      // });
     },
 
     /**
@@ -329,30 +276,21 @@
      *
      * @param {Mixed} id - key for document to update
      * @param {Object} updates - updates to apply to document
-     * @param {Function} callback(err, {Boolean})
+     * @return {Promise}
      */
-    update: function(id, updates, callback) {
+    update: function(id, updates) {
       var that = this;
       updates = updates || {};
 
-      this.read(id, function(err, doc) {
-        if (err) {
-          return callback(err, null);
-        }
-
-        if (!doc) {
-          return callback(null, false);
-        }
-
+      return this.read(id).then(function(doc) {
         Object.keys(doc).forEach(function(prop) {
           if (updates.hasOwnProperty(prop)) {
             doc[prop] = updates[prop];
           }
         });
 
-        // null means the document exists but could not be updated
-        if (!that.valid(doc)) {
-          return callback(null, null, 'invalid');
+        if (!that.isValid(doc)) {
+          throw new Error('Updated document is invalid');
         }
 
         // remove key and unique properties
@@ -362,16 +300,7 @@
         });
 
         doc = that.clean(doc);
-
-        return that._db.update(o(that._key, id), {
-          $set: doc
-        }, function(err) {
-          if (err) {
-            return callback(err, null);
-          }
-
-          that.read(id, callback);
-        });
+        return that._dbApi.update(id, doc);
       });
     },
 
@@ -381,35 +310,63 @@
      * @param {Mixed} id - key for document to delete
      * @return {Promise}
      */
-    delete: function(id, callback) {
-      return this._dbApi.delete(id);
+    delete: function(id) {
+      return this._dbApi.delete(id).then(function(deleted) {
+        if (!deleted) {
+          throw new Error('Document not found');
+        }
+      });
+    },
 
-/*
-      this._db.remove(o(this._key, id || ''), function(err, num) {
+    /**
+     * REST handler
+     *
+     * @param {ServerResponse} res
+     * @param {Function} [map] - map data before responding
+     */
+    rest: function(res, map) {
+      var that = this;
+      var method = res.req.method;
+
+      return function(err, data, status) {
         if (err) {
-          return callback(err, null);
+          return res.status(500).end();
         }
 
-        var n = typeof num === 'number' ? num : num.n;
-        callback(null, n > 0);
-      });
-*/
+        var statusCode = null;
+        switch(status) {
+          case 'invalid': statusCode = 400; break;
+        }
 
+        var fin = function() {
+          if (method === 'POST') {
+            return data ?
+              res.status(201)
+                .header('Location', '/' + that._path + '/' + data[that._key])
+                .json(data) :
+              res.status(statusCode || 409).end();
+          }
+
+          if (method === 'PUT' && data === null) {
+            return res.status(statusCode || 409).end();
+          }
+
+          return data ?
+            res.status(200).json(data) :
+            res.status(404).end();
+        };
+
+        if (data && typeof map === 'function') {
+          if (map.length === 2) {
+            return map(data, fin);
+          }
+
+          data = map(data) || data;
+        }
+
+        fin();
+      };
     }
-  };
-
-  /**
-   * Create an object with a variable key
-   *
-   * @param {Mixed} key
-   * @param {Mixed} value
-   * @return {Object}
-   */
-  var o = function(key, value) {
-    var obj = {};
-    obj[key] = value;
-
-    return obj;
   };
 
   module.exports = Rudiment;
