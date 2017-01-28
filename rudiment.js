@@ -111,12 +111,12 @@
       }
     });
 
-    this._dbApi = this._dbType.api();
+    this._dbApi = this._dbType.api;
     Object.keys(this._dbApi).forEach(function(dbApiFnName) {
       that._dbApi[dbApiFnName] = that._dbApi[dbApiFnName].bind(that);
     });
 
-    this._init = this._auto ? this._dbApi.init() : Promise.resolve();
+    this._init = this._dbApi.init();
   };
 
   Rudiment.getSupportedDbTypes = function() {
@@ -271,8 +271,8 @@
     /**
      * Update a document in the database by key
      *
-     * The key and unique values of a document cannot be updated. Remove the
-     * document and create a new document instead.
+     * The key and unique values of a document cannot be updated with this
+     * method. Delete the document and create a new document instead.
      *
      * @param {Mixed} id - key for document to update
      * @param {Object} updates - updates to apply to document
@@ -293,7 +293,6 @@
           throw new Error('Updated document is invalid');
         }
 
-        // remove key and unique properties
         delete doc[that._key];
         that._uniq.forEach(function(uniq) {
           delete doc[uniq];
