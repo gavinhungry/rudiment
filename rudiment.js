@@ -44,7 +44,10 @@
    */
   var pick = function(obj, keys) {
     return keys.reduce(function(memo, key) {
-      memo[key] = obj[key];
+      if (obj[key] !== undefined) {
+        memo[key] = obj[key];
+      }
+
       return memo;
     }, {});
   };
@@ -150,12 +153,12 @@
       }, {});
     },
 
-    findMaxIndex: function() {
+    getNextIndex: function() {
       if (!this._auto) {
         return Promise.resolve(null);
       }
 
-      return this._dbApi.findMaxIndex();
+      return this._dbApi.getNextIndex();
     },
 
     /**
@@ -183,8 +186,16 @@
      * @return {Promise}
      */
     isAdmissible: function(doc) {
+      if (!this.isValid(doc)) {
+        return Promise.resolve(false);
+      }
+
       var props = pick(doc, this._uniq);
-      return this.isValid(doc) ? this._dbApi.isAdmissible(doc, props) : Promise.resolve(false);
+      if (!Object.keys(props).length) {
+        return Promise.resolve(true);
+      }
+
+      return this._dbApi.isAdmissible(doc, props);
     },
 
     /**
@@ -209,7 +220,7 @@
 
         doc = that.clean(doc);
 
-        return that.findMaxIndex();
+        return that.getNextIndex();
       }).then(function(max) {
         if (typeof max === 'number') {
           doc[that._key] = max;

@@ -15,10 +15,10 @@
     "url": "git://github.com/gavinhungry/rudiment.git"
   },
 
+  "main": "rudiment.js",
+
   "dbModules": [
     "mongodb",
     "rethinkdb"
-  ],
-
-  "main": "rudiment.js"
+  ]
 }
