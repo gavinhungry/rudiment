@@ -153,12 +153,12 @@
       }, {});
     },
 
-    getNextIndex: function() {
+    getNextKey: function() {
       if (!this._auto) {
         return Promise.resolve(null);
       }
 
-      return this._dbApi.getNextIndex();
+      return this._dbApi.getNextKey();
     },
 
     /**
@@ -220,7 +220,7 @@
 
         doc = that.clean(doc);
 
-        return that.getNextIndex();
+        return that.getNextKey();
       }).then(function(max) {
         if (typeof max === 'number') {
           doc[that._key] = max;
@@ -228,7 +228,7 @@
 
         return that._dbApi.create(doc).then(function(doc) {
           if (!doc) {
-            throw new Error ('Document not created');
+            throw new Error('Document not created');
           }
 
           return doc;
@@ -239,14 +239,37 @@
     /**
      * Get a document from the database by key
      *
+     * @param {Number} key
+     * @return {Promise}
+     */
+    read: function(key) {
+      if (!this._auto) {
+        return Promise.reject(new Error('No auto key specified'));
+      }
+
+      var props = {};
+      props[this._key] = parseInt(key, 10);
+
+      return this._dbApi.find(props).then(function(docs) {
+        return docs[0];
+      });
+    },
+
+    /**
+     * Get a document from the database by key
+     *
      * @param {Mixed} id - key for document to get
      * @return {Promise}
      */
-    read: function(id) {
+    readByDbId: function(id) {
       var that = this;
 
       return this._dbApi.read(id).then(function(doc) {
-        return doc && typeof that._out_map === 'function' ? that._out_map(doc) || doc : doc;
+        if (!doc) {
+          throw new Error('Document not found');
+        }
+
+        return typeof that._out_map === 'function' ? that._out_map(doc) || doc : doc;
       });
     },
 
@@ -331,51 +354,45 @@
     /**
      * REST handler
      *
+     * @param {Promise} operation
      * @param {ServerResponse} res
-     * @param {Function} [map] - map data before responding
+     * @param {Array} [removeProps] properties to remove
      */
-    rest: function(res, map) {
+    rest: function(operation, res, removeProps) {
       var that = this;
       var method = res.req.method;
 
-      return function(err, data, status) {
-        if (err) {
-          return res.status(500).end();
+      return operation.then(function(doc) {
+        delete doc[that._key];
+        delete doc[that._dbType.id];
+        if (removeProps) {
+          removeProps.forEach(function(prop) {
+            delete doc[prop];
+          });
         }
 
-        var statusCode = null;
-        switch(status) {
-          case 'invalid': statusCode = 400; break;
+        if (method === 'POST') {
+          if (that._path) {
+            res.header('Location', '/' + that._path + '/' + doc[that._key]);
+          }
+
+          return res.status(201).json(doc);
         }
 
-        var fin = function() {
-          if (method === 'POST') {
-            return data ?
-              res.status(201)
-                .header('Location', '/' + that._path + '/' + data[that._key])
-                .json(data) :
-              res.status(statusCode || 409).end();
-          }
+        return res.status(200).json(doc);
+      }, function(err) {
+        console.error(err.message);
 
-          if (method === 'PUT' && data === null) {
-            return res.status(statusCode || 409).end();
-          }
-
-          return data ?
-            res.status(200).json(data) :
-            res.status(404).end();
-        };
-
-        if (data && typeof map === 'function') {
-          if (map.length === 2) {
-            return map(data, fin);
-          }
-
-          data = map(data) || data;
+        if (method === 'POST' || method === 'PUT') {
+          return res.status(409).end();
         }
 
-        fin();
-      };
+        if (method === 'GET') {
+          res.status(404).end();
+        }
+
+        return res.status(500).end();
+      });
     }
   };
 
