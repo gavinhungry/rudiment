@@ -53,20 +53,37 @@
   };
 
   /**
+   * Create a map function that maps the value or returns the original value
+   *
+   * @param {Function} [map]
+   * @return {Function}
+   */
+  var mapOrSelf = function(map) {
+    return function(val) {
+      return typeof map === 'function' ? (map(val) || val) : val;
+    };
+  };
+
+  /**
    * @constructor for Rudiment objects
    *
-   * Rudiment objects have prototype methods that can be overridden as needed.
-   * By default, the database should support a subset of MongoDB API methods.
+   * Rudiment objects have prototype methods that can be overridden in this
+   * constructor as needed.
    *
-   * The schema is a predicate function that determines the validity of a
-   * candidate document. The props array is filled automatically if possible.
+   * The schema is a predicate function (or array of functions) that determines
+   * the validity of a candidate document. The props array is filled
+   * automatically if possible.
    *
    * @param {Object} opts
-   * @param {Object} opts.db - database
-   * @param {Function} [opts.schema] - predicate function for schema validation
-   * @param {Array} [opts.props] - document properties to filter
-   * @param {String} [opts.key] - document key in database (defaults to first prop or dbType.id)
-   * @param {Array} [opts.uniq] - document properties to consider unique
+   * @param {Object} opts.db - database table
+   * @param {Function|Array} [opts.schema] - predicate function(s) for schema validation
+   * @param {Array} [opts.props] - whitelisted properties (extracted from schema if possible)
+   * @param {String} [opts.key] - key property name (must be defined to use `byKey` methods)
+   * @param {String} [opts.index] - auto-index property name (must be defined to use `byIndex` methods)
+   * @param {Array} [opts.uniq] - unique property names (includes `key` and `index`)
+   * @param {Function} [opts.in] - map for documents created or updated
+   * @param {Function} [opts.out] - map for documents read
+   * @param {String} [opts.path] - REST path
    */
   var Rudiment = function(opts) {
     var that = this;
@@ -84,8 +101,6 @@
     }
 
     this._schema = Array.isArray(opts.schema) ? opts.schema : (opts.schema ? [opts.schema] : []);
-    this._in_map = opts.in;
-    this._out_map = opts.out;
 
     // attempt to get props from the passed schema
     var schemaProps;
@@ -96,16 +111,22 @@
       }
     }
 
-    this._path = opts.path;
-    this._key = opts.key || (schemaProps ? schemaProps[0] : null) || this._dbType.id;
     this._props = opts.props || schemaProps;
 
-    if (opts.auto) {
-      this._auto = true;
-      this._key = opts.auto;
-    }
+    this._key = opts.key;
+    this._index = opts.index;
 
-    this._uniq = opts.uniq || [this._key];
+    this._uniq = [
+      this._dbType.id,
+      this._key,
+      this._index
+    ].concat(opts.uniq).filter(function(prop) {
+      return prop;
+    });
+
+    this._in_map = mapOrSelf(opts.in);
+    this._out_map = mapOrSelf(opts.out);
+    this._path = opts.path;
 
     // allow the constructor to override any of the prototype methods
     Object.keys(Rudiment.prototype).forEach(function(method) {
@@ -134,7 +155,21 @@
     },
 
     /**
-     * Remove extraneous properties from a document
+     * If using auto-indexing, generate a unique numeric index (starting at 0)
+     * to use a pseudo-key
+     *
+     * @return {Promise}
+     */
+    getNextIndex: function() {
+      if (!this._index) {
+        return Promise.resolve(null);
+      }
+
+      return this._dbApi.getNextIndex();
+    },
+
+    /**
+     * Remove extraneous properties from a proposed document
      *
      * @param {Object} doc - a document to clean
      * @return {Object} a copy of the cleaned document
@@ -153,19 +188,11 @@
       }, {});
     },
 
-    getNextKey: function() {
-      if (!this._auto) {
-        return Promise.resolve(null);
-      }
-
-      return this._dbApi.getNextKey();
-    },
-
     /**
-     * Check if a document is valid
+     * Check if a proposed document is valid by comparing it to the defined
+     * schema(s)
      *
-     * A document is valid if it passes the schema. If no schema is defined,
-     * always returns true.
+     * If no schema is defined, always returns true.
      *
      * @param {Object} doc - a document to test
      * @return {Boolean}
@@ -177,7 +204,7 @@
     },
 
     /**
-     * Check if a document is admissible
+     * Check if a proposed document is admissible into the database
      *
      * A document is admissible if it passes the valid predicate, and no other
      * document in the database is already using its unique keys.
@@ -199,17 +226,14 @@
     },
 
     /**
-     * Insert a new document into the database
+     * Create and insert a new document into the database
      *
      * @param {Object} doc - a document to insert
      * @return {Promise}
      */
     create: function(doc) {
       var that = this;
-
-      if (doc && typeof that._in_map === 'function') {
-        doc = that._in_map(doc) || doc;
-      }
+      doc = that._in_map(doc);
 
       return this._init.then(function() {
         return that.isAdmissible(doc);
@@ -220,9 +244,13 @@
 
         doc = that.clean(doc);
 
-        return that.getNextKey();
+        if (that._index) {
+          delete doc[that._index];
+        }
+
+        return that.getNextIndex();
       }).then(function(max) {
-        if (typeof max === 'number') {
+        if (that._index && typeof max === 'number') {
           doc[that._key] = max;
         }
 
@@ -237,43 +265,6 @@
     },
 
     /**
-     * Get a document from the database by key
-     *
-     * @param {Number} key
-     * @return {Promise}
-     */
-    read: function(key) {
-      if (!this._auto) {
-        return Promise.reject(new Error('No auto key specified'));
-      }
-
-      var props = {};
-      props[this._key] = parseInt(key, 10);
-
-      return this._dbApi.find(props).then(function(docs) {
-        return docs[0];
-      });
-    },
-
-    /**
-     * Get a document from the database by key
-     *
-     * @param {Mixed} id - key for document to get
-     * @return {Promise}
-     */
-    readByDbId: function(id) {
-      var that = this;
-
-      return this._dbApi.read(id).then(function(doc) {
-        if (!doc) {
-          throw new Error('Document not found');
-        }
-
-        return typeof that._out_map === 'function' ? that._out_map(doc) || doc : doc;
-      });
-    },
-
-    /**
      * Get all documents from the database with matching properties
      *
      * @param {Object} props
@@ -283,13 +274,67 @@
       var that = this;
 
       return this._dbApi.find(props || {}).then(function(docs) {
-        if (docs && typeof that._out_map === 'function') {
-          docs = docs.map(function(doc) {
-            return that._out_map(doc) || doc;
-          });
+        return docs.map(that._out_map);
+      });
+    },
+
+    /**
+     * Get a document from the database by database ID
+     *
+     * @param {String} id
+     * @return {Promise}
+     */
+    read: function(id) {
+      var that = this;
+
+      return this._dbApi.read(id).then(function(doc) {
+        if (!doc) {
+          throw new Error('Document not found');
         }
 
-        return docs;
+        return that._out_map(doc);
+      });
+    },
+
+    /**
+     * Get a document from the database by auto-index
+     *
+     * @param {Number|String} index
+     * @return {Promise}
+     */
+    readByIndex: function(index) {
+      var that = this;
+
+      if (!this._index) {
+        return Promise.reject(new Error('No auto-indexing key specified'));
+      }
+
+      var props = {};
+      props[this._index] = parseInt(key, 10);
+
+      return this._dbApi.find(props).then(function(docs) {
+        return that._out_map(docs[0]);
+      });
+    },
+
+    /**
+     * Get a document from the database by key
+     *
+     * @param {String} key
+     * @return {Promise}
+     */
+    readByKey: function(key) { // FIXME: check null key provided here
+      var that = this;
+
+      if (!this._key) {
+        return Promise.reject(new Error('No unique key specified'));
+      }
+
+      var props = {};
+      props[this._key] = key;
+
+      return this._dbApi.find(props).then(function(docs) {
+        return that._out_map(docs[0]);
       });
     },
 
@@ -303,44 +348,97 @@
     },
 
     /**
-     * Update a document in the database by key
+     * Update an existing database document
      *
-     * The key and unique values of a document cannot be updated with this
-     * method. Delete the document and create a new document instead.
+     * The unique values of a document cannot be updated with this method.
+     * Delete the document and create a new document instead.
      *
-     * @param {Mixed} id - key for document to update
+     * @private
+     *
+     * @param {Document} doc
      * @param {Object} updates - updates to apply to document
      * @return {Promise}
      */
-    update: function(id, updates) {
-      var that = this;
+    _updateDoc: function(doc, updates) {
       updates = updates || {};
 
-      return this.read(id).then(function(doc) {
-        Object.keys(doc).forEach(function(prop) {
-          if (updates.hasOwnProperty(prop)) {
-            doc[prop] = updates[prop];
-          }
-        });
-
-        if (!that.isValid(doc)) {
-          throw new Error('Updated document is invalid');
+      Object.keys(doc).forEach(function(prop) {
+        if (updates.hasOwnProperty(prop)) {
+          doc[prop] = updates[prop];
         }
+      });
 
-        delete doc[that._key];
-        that._uniq.forEach(function(uniq) {
-          delete doc[uniq];
-        });
+      if (!this.isValid(doc)) {
+        throw new Error('Updated document is invalid');
+      }
 
-        doc = that.clean(doc);
-        return that._dbApi.update(id, doc);
+      var id = doc[this._dbType.id];
+
+      this._uniq.forEach(function(uniq) {
+        delete doc[uniq];
+      });
+
+      doc = this.clean(doc);
+      return this._dbApi.update(id, doc);
+    },
+
+    /**
+     * Update a document in the database by database ID
+     *
+     * @param {String} id
+     * @param {Object} updates - updates to apply to document
+     * @return {Promise}
+     */
+    update: function(id, updates) { // FIXME: use in_map?
+      var that = this;
+
+      return this.read(id).then(function(doc) {
+        return that._updateDoc(doc, updates);
+      });
+    },
+
+    /**
+     * Update a document in the database by auto-index
+     *
+     * @param {Number|String} index
+     * @param {Object} updates - updates to apply to document
+     * @return {Promise}
+     */
+    updateByIndex: function(index, updates) {
+      var that = this;
+
+      if (!this._index) {
+        return Promise.reject(new Error('No auto-indexing key specified'));
+      }
+
+      return this.readByIndex(index).then(function(doc) {
+        return that._updateDoc(doc, updates);
+      });
+    },
+
+    /**
+     * Update a document in the database by key
+     *
+     * @param {String} key
+     * @param {Object} updates - updates to apply to document
+     * @return {Promise}
+     */
+    updateByKey: function(key, updates) {
+      var that = this;
+
+      if (!this._key) {
+        return Promise.reject(new Error('No unique key specified'));
+      }
+
+      return this.readByKey(key).then(function(doc) {
+        return that._updateDoc(doc, updates);
       });
     },
 
     /**
      * Delete a document from the database
      *
-     * @param {Mixed} id - key for document to delete
+     * @param {String} id
      * @return {Promise}
      */
     delete: function(id) {
@@ -352,28 +450,55 @@
     },
 
     /**
-     * REST handler
+     * Delete a document from the database by auto-index
+     *
+     * @param {Number|String} index
+     * @return {Promise}
+     */
+    deleteByIndex: function(index) {
+      var that = this;
+
+      if (!this._index) {
+        return Promise.reject(new Error('No auto-indexing key specified'));
+      }
+
+      return this.readByIndex(index).then(function(doc) {
+        return that.delete(doc[that._dbType.id]);
+      });
+    },
+
+    /**
+     * Delete a document from the database by key
+     *
+     * @param {String} key
+     * @return {Promise}
+     */
+    deleteByKey: function(key) {
+      var that = this;
+
+      if (!this._key) {
+        return Promise.reject(new Error('No unique key specified'));
+      }
+
+      return this.readByKey(key).then(function(doc) {
+        return that.delete(doc[that._dbType.id]);
+      });
+    },
+
+    /**
+     * Middleware REST handler for CRUD operations
      *
      * @param {Promise} operation
      * @param {ServerResponse} res
-     * @param {Array} [removeProps] properties to remove
      */
-    rest: function(operation, res, removeProps) {
+    rest: function(operation, res) {
       var that = this;
       var method = res.req.method;
 
       return operation.then(function(doc) {
-        delete doc[that._key];
-        delete doc[that._dbType.id];
-        if (removeProps) {
-          removeProps.forEach(function(prop) {
-            delete doc[prop];
-          });
-        }
-
         if (method === 'POST') {
-          if (that._path) {
-            res.header('Location', '/' + that._path + '/' + doc[that._key]);
+          if (that._path && (that._key || that._index)) {
+            res.header('Location', '/' + that._path + '/' + doc[that._key || that._index]);
           }
 
           return res.status(201).json(doc);
