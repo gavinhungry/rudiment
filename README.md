@@ -15,32 +15,42 @@ var Rudiment = require('rudiment');
 ```
 
 ```javascript
-var employees = new Rudiment({
-  db: db.employees,
+var users = new Rudiment({
+  db: db.users,
   schema: require('js-schema')({
     username: String,
-    employeeId: Number
-  })
+    name: String,
+  }),
+
+  key: 'username',
+  index: 'uid'
 });
 ```
 
 #### Options
+`db`: Existing database table object to use. For `rethinkdb`, the suggested
+module is [`rethinkdbdash`](https://www.npmjs.com/package/rethinkdbdash).
 
-`db`
+`schema`: Optional schema function (or an array of such functions). These can be
+custom functions, or functions returned by a schema library such as
+[`js-schema`](https://www.npmjs.com/package/js-schema).
 
-`schema`
+`props`: Optional array of whitelisted property names to keep in proposed
+documents before creating or updating. If using `js-schema`, this options is not
+needed, as the properties will be extracted from the schema.
 
-`props`
+`key`: Optional property name to be used as unique key.
 
-`key`
+`index`: Optional property name to use as auto-index, starting at 0.
 
-`uniq`
+`uniq`: Optional array of property names to be considered unique (database ID,
+`key` and `index` are automatically included here).
 
-`in`
+`in`: Optional map function for documents being created or updated.
 
-`out`
+`out`: Optional map function for documents being read.
 
-`auto`
+`path`: Optional REST path.
 
 Methods
 -------
@@ -60,117 +70,191 @@ All methods can be overridden by the constructor.
 ### getDbType
 Get the detected database type.
 ```javascript
-crud.getDbType();
+users.getDbType();
 // 'rethinkdb'
 ```
 
-### clean
-Remove extraneous properties from a document.
+### getNextIndex
+If using [auto-indexing](#options) (`index`), generate a unique numeric index
+(starting at `0`) to use a pseudo-key. If `index` is not set, this function
+always returns a promise resolving to `null`.
 
 ```javascript
-crud.clean({
-  username: 'foo',
-  age: 21
-  color: blue
+crud.getNextKey().then(function(index) {
+  // ...
 });
-
-// { username: 'foo', age: 18 }
 ```
 
-### getNextKey
-If using [auto-indexing](#options) (`auto`), generate a unique numeric index to use a pseudo-key. If `auto` is not set, this function always returns a promise resolving to `null`.
+### clean
+Remove extraneous properties from a proposed document. This method only works if
+the [first defined schema](#options) is a `js-schema` object, or if the `props`
+option is provided.
 
 ```javascript
-crud.getNextKey().then(function(index) { /* ... */ });
+users.clean({
+  username: 'foo',
+  name: 'Foo',
+  color: 'blue' // this property is not part of the defined schema
+});
+
+// { username: 'foo', name: 'Foo' }
 ```
 
 ### isValid
-Check if a document is valid.
+Check if a proposed document is valid by comparing it to the defined schema(s).
 
 ```javascript
-crud.valid({ username: 'foo', age: 20 });
+users.isValid({ username: 'foo', name: 'Foo' });
 // true
 
-crud.valid({ username: 'bar', age: 'This should be a number' });
+// `name` should be a String
+users.isValid({ username: 'foo', name: 200 });
 // false
+
+// Extraneous properties are ignored here
+users.isValid({ username: 'foo', name: 'Foo', color: 'green' });
+// true
 ```
 
 ### isAdmissible
-Check if a document is admissible into the database. An admissible document is one that passes `isValid`, and does not have any unique keys that are already present in the database.
+Check if a proposed document is admissible into the database. An admissible
+document should pass `isValid` and not have any unique keys that are already
+present in the database.
 
 ```javascript
-crud.create({
-  username: 'foo',
-  age:
+users.isAdmissible({
+  username: 'foo'
+  name: 'Bar'
+}).then(function(ok) {
+  // `ok` is true if admissible, false otherwise
 });
 ```
 
-
 ### create
-
-Insert a new document into the database.
+Create and insert a new document into the database.
 
 ```javascript
-r.create({ serial: 123, name: 'foo' }, function(err, doc) {
-  // `doc` is `null` if not admissible
+users.create({
+  username: 'foo',
+  name: 'Foo'
+}).then(function(doc) {
+  // `doc` is newly inserted document
+});
+```
+
+### find
+Get all documents from the database with matching properties.
+
+```javascript
+users.find({
+  name: 'Foo'
+}).then(function(docs) {
+  // `docs` is an array of matching documents
 });
 ```
 
 ### read
-
-Get a document from the database by key.
+Get a document from the database by database ID.
 
 ```javascript
-r.read(123, function(err, doc) {
-  // `doc` is the document in database with a `serial` of `123`, or `null` if not found.
+users.read('foo-db-id').then(function(doc) {
+  // `doc` is matching document
 });
 ```
 
-### readByDbId
+### readByIndex
+Get a document from the database by auto-index.
 
-### find
+```javascript
+users.readByIndex(0).then(function(doc) {
+  // `doc` is matching document
+});
+```
+### readByKey
+Get a document from the database by key.
 
+```javascript
+users.readByKey('foo').then(function(doc) {
+  // `doc` is matching document
+});
+```
 ### readAll
-
 Get all documents from the database.
 
 ```javascript
-r.readAll(function(err, docs) {
-  // `docs` is an array of documents
+users.readAll().then(function(docs) {
+  // `docs` is an array of all documents
 });
 ```
 
 ### update
+Update a document in the database by database ID.
 
+```javascript
+users.update('foo-db-id', {
+  name: 'Dr. Foo'
+}).then(function(doc) {
+  // `doc` is updated document
+});
+```
+
+### updateByIndex
+Update a document in the database by auto-index.
+
+```javascript
+users.updateByIndex(0, {
+  name: 'Dr. Foo'
+}).then(function(doc) {
+  // `doc` is updated document
+});
+```
+
+### updateByKey
 Update a document in the database by key.
 
 ```javascript
-r.update(123, { name: 'bar' }, function(err, updated) {
-  // updated is `true` if a document was updated, `false` otherwise
+users.updateByKey('foo', {
+  name: 'Dr. Foo'
+}).then(function(doc) {
+  // `doc` is updated document
 });
 ```
 
 ### delete
-
-Delete a document from the database.
+Delete a document from the database by database ID.
 
 ```javascript
-r.delete(123, function(err, removed) {
-  // removed is `true` if a document was deleted, `false` otherwise
+users.delete('foo-db-id').then(function() {
+  // document was deleted
+});
+```
+
+### deleteByIndex
+Delete a document from the database by auto-index.
+
+```javascript
+users.deleteByIndex(0).then(function() {
+  // document was deleted
+});
+```
+
+### deleteByKey
+Delete a document from the database by key.
+
+```javascript
+users.deleteByKey('foo').then(function() {
+  // document was deleted
 });
 ```
 
 ### rest
-
-A REST handler for `ServerResponse` objects.
+Middleware REST handler for CRUD operations.
 
 ```javascript
-api.post('/people', function(req, res) {
-  r.create(req.body, r.rest(res));
-  // person URI is provided by Location response header
+api.post('/users', function(req, res) {
+  users.rest(users.create(req.body), res);
 });
 ```
-
 
 License
 -------
