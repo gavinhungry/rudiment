@@ -251,7 +251,7 @@
         return that.getNextIndex();
       }).then(function(max) {
         if (that._index && typeof max === 'number') {
-          doc[that._key] = max;
+          doc[that._index] = max;
         }
 
         return that._dbApi.create(doc).then(function(doc) {
@@ -278,6 +278,14 @@
       });
     },
 
+    _readDoc: function(doc) {
+      if (!doc) {
+        throw new Error('Document not found');
+      }
+
+      return this._out_map(doc);
+    },
+
     /**
      * Get a document from the database by database ID
      *
@@ -288,11 +296,7 @@
       var that = this;
 
       return this._dbApi.read(id).then(function(doc) {
-        if (!doc) {
-          throw new Error('Document not found');
-        }
-
-        return that._out_map(doc);
+        return that._readDoc(doc);
       });
     },
 
@@ -305,15 +309,15 @@
     readByIndex: function(index) {
       var that = this;
 
-      if (!this._index) {
+      if (!this._index || typeof index !== 'number') {
         return Promise.reject(new Error('No auto-indexing key specified'));
       }
 
       var props = {};
-      props[this._index] = parseInt(key, 10);
+      props[this._index] = parseInt(index, 10);
 
       return this._dbApi.find(props).then(function(docs) {
-        return that._out_map(docs[0]);
+        return that._readDoc(docs[0]);
       });
     },
 
@@ -323,10 +327,10 @@
      * @param {String} key
      * @return {Promise}
      */
-    readByKey: function(key) { // FIXME: check null key provided here
+    readByKey: function(key) {
       var that = this;
 
-      if (!this._key) {
+      if (!this._key || !key) {
         return Promise.reject(new Error('No unique key specified'));
       }
 
@@ -334,7 +338,7 @@
       props[this._key] = key;
 
       return this._dbApi.find(props).then(function(docs) {
-        return that._out_map(docs[0]);
+        return that._readDoc(docs[0]);
       });
     },
 
@@ -360,7 +364,7 @@
      * @return {Promise}
      */
     _updateDoc: function(doc, updates) {
-      updates = updates || {};
+      updates = this._in_map(updates || {});
 
       Object.keys(doc).forEach(function(prop) {
         if (updates.hasOwnProperty(prop)) {
@@ -389,7 +393,7 @@
      * @param {Object} updates - updates to apply to document
      * @return {Promise}
      */
-    update: function(id, updates) { // FIXME: use in_map?
+    update: function(id, updates) {
       var that = this;
 
       return this.read(id).then(function(doc) {
@@ -407,7 +411,7 @@
     updateByIndex: function(index, updates) {
       var that = this;
 
-      if (!this._index) {
+      if (!this._index || typeof index !== 'number') {
         return Promise.reject(new Error('No auto-indexing key specified'));
       }
 
@@ -426,7 +430,7 @@
     updateByKey: function(key, updates) {
       var that = this;
 
-      if (!this._key) {
+      if (!this._key || !key) {
         return Promise.reject(new Error('No unique key specified'));
       }
 
@@ -458,7 +462,7 @@
     deleteByIndex: function(index) {
       var that = this;
 
-      if (!this._index) {
+      if (!this._index || typeof index !== 'number') {
         return Promise.reject(new Error('No auto-indexing key specified'));
       }
 
@@ -476,7 +480,7 @@
     deleteByKey: function(key) {
       var that = this;
 
-      if (!this._key) {
+      if (!this._key || !key) {
         return Promise.reject(new Error('No unique key specified'));
       }
 
