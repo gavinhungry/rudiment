@@ -162,7 +162,7 @@
      */
     getNextIndex: function() {
       if (!this._index) {
-        return Promise.resolve(null);
+        return Promise.reject(new Error('No auto-indexing key specified'));
       }
 
       return this._dbApi.getNextIndex();
