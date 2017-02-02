@@ -15,9 +15,12 @@ var Rudiment = require('rudiment');
 ```
 
 ```javascript
+var db = require('rethinkdbdash')();
+var schema = require('js-schema');
+
 var users = new Rudiment({
-  db: db.users,
-  schema: require('js-schema')({
+  db: db.table('users'),
+  schema: schema({
     username: String,
     name: String,
   }),
@@ -31,20 +34,20 @@ var users = new Rudiment({
 `db`: Existing database table object to use. For `rethinkdb`, the suggested
 module is [`rethinkdbdash`](https://www.npmjs.com/package/rethinkdbdash).
 
-`schema`: Optional schema function (or an array of such functions). These can be
-custom functions, or functions returned by a schema library such as
+`schema`: Optional schema function (or an array of schema functions). These may
+be custom predicate functions, or functions returned by a schema library like
 [`js-schema`](https://www.npmjs.com/package/js-schema).
 
 `props`: Optional array of whitelisted property names to keep in proposed
-documents before creating or updating. If using `js-schema`, this options is not
+documents before creating or updating. If using `js-schema`, this option is not
 needed, as the properties will be extracted from the schema.
 
 `key`: Optional property name to be used as unique key.
 
-`index`: Optional property name to use as auto-index, starting at 0.
+`index`: Optional property name to use as an auto-index, starting at 0.
 
 `uniq`: Optional array of property names to be considered unique (database ID,
-`key` and `index` are automatically included here).
+`key` and `index` are automatically included).
 
 `in`: Optional map function for documents being created or updated.
 
@@ -65,7 +68,7 @@ Rudiment.getSupportedDbTypes();
 
 ### Prototype Methods
 
-All methods can be overridden by the constructor.
+All methods may be overridden by the constructor.
 
 ### getDbType
 Get the detected database type.
@@ -75,20 +78,19 @@ users.getDbType();
 ```
 
 ### getNextIndex
-If using [auto-indexing](#options) (`index`), generate a unique numeric index
-(starting at `0`) to use a pseudo-key. If `index` is not set, this function
-always returns a promise resolving to `null`.
+If using auto-indexing (`index`), generate a unique numeric index
+(starting at `0`) to use a pseudo-key.
 
 ```javascript
-crud.getNextKey().then(function(index) {
+users.getNextIndex().then(function(index) {
   // ...
 });
 ```
 
 ### clean
 Remove extraneous properties from a proposed document. This method only works if
-the [first defined schema](#options) is a `js-schema` object, or if the `props`
-option is provided.
+the first defined schema is a `js-schema` object, or if the `props` option is
+provided.
 
 ```javascript
 users.clean({
@@ -118,13 +120,13 @@ users.isValid({ username: 'foo', name: 'Foo', color: 'green' });
 
 ### isAdmissible
 Check if a proposed document is admissible into the database. An admissible
-document should pass `isValid` and not have any unique keys that are already
-present in the database.
+document should pass `isValid` and not have any unique properties with values
+that are already present in the database.
 
 ```javascript
 users.isAdmissible({
   username: 'foo'
-  name: 'Bar'
+  name: 'Foo'
 }).then(function(ok) {
   // `ok` is true if admissible, false otherwise
 });
