@@ -164,14 +164,6 @@ users.read('foo-db-id').then(function(doc) {
 });
 ```
 
-### readByIndex
-Get a document from the database by auto-index.
-
-```javascript
-users.readByIndex(0).then(function(doc) {
-  // `doc` is matching document
-});
-```
 ### readByKey
 Get a document from the database by key.
 
@@ -180,6 +172,16 @@ users.readByKey('foo').then(function(doc) {
   // `doc` is matching document
 });
 ```
+
+### readByIndex
+Get a document from the database by auto-index.
+
+```javascript
+users.readByIndex(0).then(function(doc) {
+  // `doc` is matching document
+});
+```
+
 ### readAll
 Get all documents from the database.
 
@@ -200,22 +202,22 @@ users.update('foo-db-id', {
 });
 ```
 
-### updateByIndex
-Update a document in the database by auto-index.
+### updateByKey
+Update a document in the database by key.
 
 ```javascript
-users.updateByIndex(0, {
+users.updateByKey('foo', {
   name: 'Dr. Foo'
 }).then(function(doc) {
   // `doc` is updated document
 });
 ```
 
-### updateByKey
-Update a document in the database by key.
+### updateByIndex
+Update a document in the database by auto-index.
 
 ```javascript
-users.updateByKey('foo', {
+users.updateByIndex(0, {
   name: 'Dr. Foo'
 }).then(function(doc) {
   // `doc` is updated document
@@ -231,20 +233,20 @@ users.delete('foo-db-id').then(function() {
 });
 ```
 
-### deleteByIndex
-Delete a document from the database by auto-index.
-
-```javascript
-users.deleteByIndex(0).then(function() {
-  // document was deleted
-});
-```
-
 ### deleteByKey
 Delete a document from the database by key.
 
 ```javascript
 users.deleteByKey('foo').then(function() {
+  // document was deleted
+});
+```
+
+### deleteByIndex
+Delete a document from the database by auto-index.
+
+```javascript
+users.deleteByIndex(0).then(function() {
   // document was deleted
 });
 ```
