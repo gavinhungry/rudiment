@@ -301,27 +301,6 @@
     },
 
     /**
-     * Get a document from the database by auto-index
-     *
-     * @param {Number|String} index
-     * @return {Promise}
-     */
-    readByIndex: function(index) {
-      var that = this;
-
-      if (!this._index || typeof index !== 'number') {
-        return Promise.reject(new Error('No auto-indexing key specified'));
-      }
-
-      var props = {};
-      props[this._index] = parseInt(index, 10);
-
-      return this._dbApi.find(props).then(function(docs) {
-        return that._readDoc(docs[0]);
-      });
-    },
-
-    /**
      * Get a document from the database by key
      *
      * @param {String} key
@@ -336,6 +315,44 @@
 
       var props = {};
       props[this._key] = key;
+
+      return this._dbApi.find(props).then(function(docs) {
+        return that._readDoc(docs[0]);
+      });
+    },
+
+    /**
+     * @private
+     */
+    _propIndex: function(index) {
+      if (!this._index) {
+        return null;
+      }
+
+      var indexInt = parseInt(index, 10);
+      if (typeof indexInt !== 'number' || !isFinite(indexInt)) {
+        return null;
+      }
+
+      var props = {};
+      props[this._index] = indexInt;
+
+      return props;
+    },
+
+    /**
+     * Get a document from the database by auto-index
+     *
+     * @param {Number|String} index
+     * @return {Promise}
+     */
+    readByIndex: function(index) {
+      var that = this;
+
+      var props = this._propIndex(index);
+      if (!props) {
+        return Promise.reject(new Error('No auto-indexing key specified'));
+      }
 
       return this._dbApi.find(props).then(function(docs) {
         return that._readDoc(docs[0]);
@@ -402,25 +419,6 @@
     },
 
     /**
-     * Update a document in the database by auto-index
-     *
-     * @param {Number|String} index
-     * @param {Object} updates - updates to apply to document
-     * @return {Promise}
-     */
-    updateByIndex: function(index, updates) {
-      var that = this;
-
-      if (!this._index || typeof index !== 'number') {
-        return Promise.reject(new Error('No auto-indexing key specified'));
-      }
-
-      return this.readByIndex(index).then(function(doc) {
-        return that._updateDoc(doc, updates);
-      });
-    },
-
-    /**
      * Update a document in the database by key
      *
      * @param {String} key
@@ -440,6 +438,21 @@
     },
 
     /**
+     * Update a document in the database by auto-index
+     *
+     * @param {Number|String} index
+     * @param {Object} updates - updates to apply to document
+     * @return {Promise}
+     */
+    updateByIndex: function(index, updates) {
+      var that = this;
+
+      return this.readByIndex(index).then(function(doc) {
+        return that._updateDoc(doc, updates);
+      });
+    },
+
+    /**
      * Delete a document from the database
      *
      * @param {String} id
@@ -450,24 +463,6 @@
         if (!deleted) {
           throw new Error('Document not found');
         }
-      });
-    },
-
-    /**
-     * Delete a document from the database by auto-index
-     *
-     * @param {Number|String} index
-     * @return {Promise}
-     */
-    deleteByIndex: function(index) {
-      var that = this;
-
-      if (!this._index || typeof index !== 'number') {
-        return Promise.reject(new Error('No auto-indexing key specified'));
-      }
-
-      return this.readByIndex(index).then(function(doc) {
-        return that.delete(doc[that._dbType.id]);
       });
     },
 
@@ -485,6 +480,20 @@
       }
 
       return this.readByKey(key).then(function(doc) {
+        return that.delete(doc[that._dbType.id]);
+      });
+    },
+
+    /**
+     * Delete a document from the database by auto-index
+     *
+     * @param {Number|String} index
+     * @return {Promise}
+     */
+    deleteByIndex: function(index) {
+      var that = this;
+
+      return this.readByIndex(index).then(function(doc) {
         return that.delete(doc[that._dbType.id]);
       });
     },
