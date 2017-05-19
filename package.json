@@ -1,6 +1,6 @@
 {
   "name": "rudiment",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "author": "Gavin Lloyd <gavinhungry@gmail.com>",
   "description": "CRUD resource manager",
   "license": "MIT",
